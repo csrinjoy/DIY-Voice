@@ -25,12 +25,12 @@
                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Alex - Professional AI Agent
             </span>
             <h1 class="text-2xl font-black text-yellow-400">Srinjoy's Voice Assistant</h1>
-            <p class="text-xs text-slate-400 mt-1">Powered by your complete resume knowledge base[cite: 1]. Just start speaking—Alex will listen and answer.</p>
+            <p class="text-xs text-slate-400 mt-1">Tap the orb to speak. Alex listens to your resume background[cite: 1] and answers instantly.</p>
         </div>
 
         <!-- Glowing Voice Orb UI -->
         <div class="relative flex items-center justify-center py-6">
-            <div id="voiceOrb" onclick="toggleAgent()" class="w-28 h-28 bg-slate-900 border-2 border-yellow-500 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 shadow-2xl">
+            <div id="voiceOrb" onclick="handleOrbClick()" class="w-28 h-28 bg-slate-900 border-2 border-yellow-500 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 shadow-2xl">
                 <i id="orbIcon" class="fa-solid fa-microphone text-yellow-400 text-3xl"></i>
             </div>
             <div id="orbRipple" class="absolute w-36 h-36 rounded-full border border-yellow-500/30 pointer-events-none hidden animate-ping"></div>
@@ -60,6 +60,7 @@
         let recognition;
         let isRunning = false;
         let selectedVoice = null;
+        let lastTranscript = "";
 
         function loadVoices() {
             const voices = window.speechSynthesis.getVoices();
@@ -74,7 +75,7 @@
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
             recognition.continuous = false;
-            recognition.interimResults = false;
+            recognition.interimResults = true;
             recognition.maxAlternatives = 1;
             recognition.lang = 'en-US';
 
@@ -83,19 +84,23 @@
             };
 
             recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript.toLowerCase().trim();
+                lastTranscript = event.results[0][0].transcript.toLowerCase().trim();
                 
                 if (window.speechSynthesis.speaking) {
                     window.speechSynthesis.cancel();
                 }
 
-                setUIState('thinking', `You asked: "${transcript}"`);
-                generateSmartAnswer(transcript);
+                setUIState('thinking', `Heard: "${lastTranscript}" (Tap orb to ask)`);
             };
 
-            recognition.onerror = (event) => {
-                if (event.error === 'no-speech' && isRunning) {
-                    restartListeningSafely();
+            recognition.onend = () => {
+                // If we captured something, process it right away when listening ends
+                if (isRunning && lastTranscript.length > 0) {
+                    const query = lastTranscript;
+                    lastTranscript = "";
+                    generateSmartAnswer(query);
+                } else if (isRunning && statusBox.dataset.state === 'listening') {
+                    setUIState('idle', 'Tap the orb to speak.');
                 }
             };
         } else {
@@ -112,23 +117,39 @@
             }
         }
 
+        // Clicking orb manually forces submission or restarts listening
+        function handleOrbClick() {
+            if (!isRunning) {
+                toggleAgent();
+            } else if (lastTranscript.length > 0) {
+                const query = lastTranscript;
+                lastTranscript = "";
+                window.speechSynthesis.cancel();
+                generateSmartAnswer(query);
+            } else {
+                try { recognition.stop(); } catch(e){}
+                setTimeout(() => { recognition.start(); }, 200);
+            }
+        }
+
         function playGreeting() {
             const greeting = "Hello, I am Alex, Srinjoy Chatterjee's professional AI assistant. Ask me anything about his experience as a Dynamics 365 Architect[cite: 1], his work at Microsoft[cite: 1], or his technical skills[cite: 1].";
             setUIState('speaking', greeting);
             speakAsAlex(greeting, () => {
-                restartListeningSafely();
+                startListeningSafely();
             });
         }
 
-        function restartListeningSafely() {
+        function startListeningSafely() {
             if (!isRunning) return;
+            lastTranscript = "";
             setTimeout(() => {
                 try {
                     recognition.start();
                 } catch (e) {
                     // Ignore if already active
                 }
-            }, 400);
+            }, 300);
         }
 
         function generateSmartAnswer(query) {
@@ -158,7 +179,7 @@
 
             setUIState('speaking', reply);
             speakAsAlex(reply, () => {
-                restartListeningSafely();
+                startListeningSafely();
             });
         }
 
@@ -195,7 +216,7 @@
                 voiceOrb.classList.remove('orb-active');
                 orbRipple.classList.add('hidden');
                 orbIcon.className = "fa-solid fa-brain text-yellow-400 text-3xl animate-spin";
-                statusBox.innerHTML = `<span class="text-blue-400 font-bold">Alex thinking...</span><span class="text-slate-300 mt-1">${message}</span>`;
+                statusBox.innerHTML = `<span class="text-blue-400 font-bold">Alex processing...</span><span class="text-slate-300 mt-1">${message}</span>`;
             } else {
                 voiceOrb.classList.remove('orb-active');
                 orbRipple.classList.add('hidden');

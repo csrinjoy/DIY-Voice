@@ -1,161 +1,248 @@
-<script>
-    const statusBox = document.getElementById('agentStatus');
-    const voiceOrb = document.getElementById('voiceOrb');
-    const orbRipple = document.getElementById('orbRipple');
-    const orbIcon = document.getElementById('orbIcon');
-    const actionBtn = document.getElementById('actionBtn');
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    let recognition;
-    let isRunning = false;
-
-    // Resume Knowledge Base
-    const kb = `
-    Name: Srinjoy Chatterjee. 
-    Role: Microsoft Dynamics 365 CE Developer and Architect. 
-    Current Job: Dynamics 365 CRM Architect at AltaMed Health Services since December 2024, focusing on C# .NET plugins, Dataverse integrations, and Power BI dashboards.
-    Past Experience: Software Engineer at Foundation Building Materials (2023-2024), Software Engineer at Microsoft (2022-2023) working on Azure data center web applications, and Software Developer at Toshiba Software India (2017-2020) building eSuite printing management apps.
-    Education: MS in Computer Science from Long Beach State University (2022), B.Tech in CSE from VIT Vellore (2017).
-    Skills: D365 CE, C#, .NET WebAPI plugins, JavaScript, Power Automate, Power Pages, Agentic AI, SSMS, Python.
-    `;
-
-    if (SpeechRecognition) {
-        recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'en-US';
-
-        recognition.onstart = () => {
-            if (isRunning) {
-                setUIState('listening', 'Listening... Speak your question now.');
-            }
-        };
-
-        recognition.onresult = (event) => {
-            const userSpeech = event.results[0][0].transcript.toLowerCase();
-            setUIState('thinking', `You asked: "${userSpeech}"`);
-            processAnswer(userSpeech);
-        };
-
-        recognition.onerror = (event) => {
-            // Ignore benign abort errors when stopping speech manually
-            if (event.error !== 'aborted' && isRunning) {
-                console.warn("Speech recognition warning:", event.error);
-                // Gracefully fallback to ready state instead of locking up
-                setUIState('idle', 'Tap the orb to speak.');
-            }
-        };
-
-        recognition.onend = () => {
-            // Keep loop alive if agent is running and not currently speaking
-            if (isRunning && statusBox.dataset.state === 'listening') {
-                setUIState('idle', 'Tap the orb if you want to say something else.');
-            }
-        };
-    } else {
-        alert("Speech recognition requires Chrome, Edge, or Safari.");
-    }
-
-    function toggleConversation() {
-        if (!isRunning) {
-            isRunning = true;
-            actionBtn.innerHTML = `<i class="fa-solid fa-stop"></i> Stop Agent`;
-            playGreeting();
-        } else {
-            stopAll();
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Srinjoy Chatterjee | Alex AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(234, 179, 8, 0.4), inset 0 0 15px rgba(234, 179, 8, 0.2); }
+            50% { box-shadow: 0 0 40px rgba(234, 179, 8, 0.8), inset 0 0 25px rgba(234, 179, 8, 0.5); }
         }
-    }
+        .orb-active { animation: pulse-glow 2s infinite ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
 
-    function playGreeting() {
-        const greeting = "Hi there! I am Srinjoy's custom AI voice assistant. Ask me anything about his experience at Microsoft, his work as a Dynamics 365 architect, or his technical skills.";
-        setUIState('speaking', greeting);
+    <div class="max-w-md w-full bg-slate-800 border border-slate-700 rounded-3xl p-8 shadow-2xl text-center space-y-6">
         
-        speakText(greeting, () => {
-            // Wait 600ms after audio finishes before safely turning on the mic
-            setTimeout(() => {
-                if (isRunning) startListening();
-            }, 600);
-        });
-    }
+        <!-- Header -->
+        <div>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium mb-3">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Alex - Professional AI Agent
+            </span>
+            <h1 class="text-2xl font-black text-yellow-400">Srinjoy's Voice Assistant</h1>
+            <p class="text-xs text-slate-400 mt-1">Powered by your complete resume knowledge base. Just start speaking—Alex will listen and interrupt if needed.</p>
+        </div>
 
-    function startListening() {
-        if (!recognition || !isRunning) return;
-        try {
-            recognition.start();
-        } catch (e) {
-            // Safe catch if recognition is already running
+        <!-- Glowing Voice Orb UI -->
+        <div class="relative flex items-center justify-center py-6">
+            <div id="voiceOrb" onclick="toggleAgent()" class="w-28 h-28 bg-slate-900 border-2 border-yellow-500 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 shadow-2xl">
+                <i id="orbIcon" class="fa-solid fa-microphone text-yellow-400 text-3xl"></i>
+            </div>
+            <div id="orbRipple" class="absolute w-36 h-36 rounded-full border border-yellow-500/30 pointer-events-none hidden animate-ping"></div>
+        </div>
+
+        <!-- Dynamic Status Display -->
+        <div id="agentStatus" class="bg-slate-900/80 border border-slate-700 rounded-2xl p-4 text-xs text-slate-300 min-h-[90px] flex flex-col items-center justify-center space-y-1">
+            <span class="text-yellow-400 font-bold">Tap the orb to start conversation with Alex</span>
+        </div>
+
+        <!-- Control Button -->
+        <div>
+            <button onclick="toggleAgent()" id="actionBtn" class="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-3 px-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-sm">
+                <i class="fa-solid fa-play"></i> Start Alex
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const statusBox = document.getElementById('agentStatus');
+        const voiceOrb = document.getElementById('voiceOrb');
+        const orbRipple = document.getElementById('orbRipple');
+        const orbIcon = document.getElementById('orbIcon');
+        const actionBtn = document.getElementById('actionBtn');
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+        let isRunning = false;
+        let selectedVoice = null;
+
+        // Full Resume Knowledge Base Context[cite: 1]
+        const resumeKB = `
+        Candidate Name: Srinjoy Chatterjee. Email: srinjoyc94@gmail.com. Phone: 562-514-2898. LinkedIn: available.
+        Education:
+        - MS in Computer Science from Long Beach State University (2020-2022).
+        - B.Tech in Computer Science and Engineering from Vellore Institute of Technology (VIT), Vellore (2013-2017).
+        Skills: Dynamics 365 CRM Sales, business rules, C#, .NET framework WebAPI custom plugins, JavaScript, Power Automate, OOB workflows, Power Pages, algorithm optimization, SQL DB, SSMS, Python, HTML5, CSS3.
+        Work Experience:
+        1. Dynamics 365 CRM Architect at AltaMed Health Services (Dec 2024 - Present): Collaborates with business teams, physicians, and sales teams to gather requirements and design system solutions. Manages CRM integration with external apps and Dataverse, builds Power BI & Dynamics dashboards, writes C# .NET plugins over out-of-the-box flows, and oversees QA/deployment across Sales and Marketing modules, Model-Driven, and Canvas Apps.
+        2. Software Engineer at Foundation Building Materials (August 2023 - Dec 2024): Full-stack developer using Dynamics 365 CRM, Power Automate, C#, Python, HTML5, CSS3, JavaScript, and SSMS. Built custom Sales CRM apps for web lead qualification, lead assignment rules, Power Pages, automated email notifications, and cross-platform ERP/non-ERP integrations (Gravity Forms).
+        3. Software Engineer at Microsoft via Brooksource (August 2022 - July 2023): Full-stack developer on web applications for global Azure data center construction workflows covering land acquisition, energy provisioning, and construction using Azure DevOps, C#, Python, JavaScript, and SSMS.
+        4. Software Developer at Toshiba Software India Pvt. Ltd. (August 2017 - June 2020): Developed printing management software (eSuite) hosted on Web and Multi-Functional Peripherals (MFP) using .NET (C#), Java, D365 CRM, Power Automate, JQuery, JavaScript, and HTML, serving international clients in Canada, China, Malaysia, and Sri Lanka.
+        5. Internship at Laranya Info edge Pvt. Ltd via Internshala (Dec 2016 - Jan 2017): Worked on 'Qoie' in Java and Python, an organized local search engine for stores and malls.
+        Leadership & Research:
+        - Published research paper: "Detection of Malaria Parasites in Thin Blood Smears Using CNN-Based Approach" (Springer).
+        - Autonomous Vehicles Safety issues and countermeasures project using AWS IoT Greengrass.
+        - Final Year Project: "Security Evaluation of Pattern Classifiers Under Attack" developed in C# .NET using an optimized Bayes Theorem algorithm to classify spam/non-spam emails.
+        `;
+
+        // Load available voices and select a professional male English voice
+        function loadVoices() {
+            const voices = window.speechSynthesis.getVoices();
+            // Look for a natural male English voice
+            selectedVoice = voices.find(v => v.name.includes('Google UK English Male') || v.name.includes('Microsoft David') || v.name.includes('Ryan') || (v.lang.includes('en') && v.name.toLowerCase().includes('male'))) 
+                         || voices.find(v => v.lang.startsWith('en')) 
+                         || voices[0];
         }
-    }
 
-    function processAnswer(query) {
-        let answer = "";
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+        loadVoices();
 
-        if (query.includes("experience") || query.includes("work") || query.includes("job") || query.includes("altamed") || query.includes("microsoft")) {
-            answer = "Srinjoy is currently a Dynamics 365 CRM Architect at AltaMed. Previously, he engineered web apps for Azure data centers at Microsoft, and worked at Foundation Building Materials and Toshiba.";
-        } else if (query.includes("skill") || query.includes("technology") || query.includes("code") || query.includes("c#") || query.includes("javascript")) {
-            answer = "His core stack includes Microsoft Dynamics 365 CE, C# .NET custom plugins, JavaScript, Power Automate, Power Pages, Python, and Agentic AI solutions.";
-        } else if (query.includes("education") || query.includes("study") || query.includes("degree") || query.includes("university")) {
-            answer = "He earned his Master's in Computer Science from Long Beach State University in 2022 and his B.Tech in Computer Science from VIT Vellore.";
-        } else if (query.includes("hello") || query.includes("hi")) {
-            answer = "Hello! How can I help you learn more about Srinjoy's professional background today?";
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = true; // Allows live speech detection for instant barge-in
+            recognition.lang = 'en-US';
+
+            recognition.onstart = () => {
+                if (isRunning) setUIState('listening', 'Listening... Speak anytime.');
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.toLowerCase();
+                
+                // BARGE-IN FEATURE: If Alex is talking and user starts speaking, shut Alex up immediately!
+                if (window.speechSynthesis.speaking) {
+                    window.speechSynthesis.cancel();
+                }
+
+                if (event.results[0].isFinal) {
+                    setUIState('thinking', `You asked: "${transcript}"`);
+                    generateSmartAnswer(transcript);
+                }
+            };
+
+            recognition.onerror = (event) => {
+                if (event.error !== 'aborted' && isRunning) {
+                    restartListeningSafely();
+                }
+            };
+
+            recognition.onend = () => {
+                // Keep the microphone loop alive if agent is running
+                if (isRunning && statusBox.dataset.state !== 'speaking' && statusBox.dataset.state !== 'thinking') {
+                    restartListeningSafely();
+                }
+            };
         } else {
-            answer = "That's a great question about Srinjoy's background. He specializes in enterprise CRM architecture and full-stack development. You can also review his interactive resume or contact him directly on this page.";
+            alert("Speech recognition requires Chrome, Edge, or Safari.");
         }
 
-        setUIState('speaking', answer);
-        speakText(answer, () => {
-            // Wait 600ms after answer finishes before reopening mic loop
+        function toggleAgent() {
+            if (!isRunning) {
+                isRunning = true;
+                actionBtn.innerHTML = `<i class="fa-solid fa-stop"></i> Stop Alex`;
+                playGreeting();
+            } else {
+                stopAgent();
+            }
+        }
+
+        function playGreeting() {
+            const greeting = "Hello, I am Alex, Srinjoy Chatterjee's professional AI assistant. I am fully familiar with his background as a Dynamics 365 Architect, his experience at Microsoft and AltaMed, and his technical skills. How can I assist you today?";
+            speakAsAlex(greeting, () => {
+                restartListeningSafely();
+            });
+        }
+
+        function restartListeningSafely() {
+            if (!isRunning) return;
             setTimeout(() => {
-                if (isRunning) startListening();
-            }, 600);
-        });
-    }
-
-    function speakText(text, callback) {
-        window.speechSynthesis.cancel(); // Stop any overlapping speech
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.05;
-        utterance.pitch = 1.0;
-
-        utterance.onend = () => {
-            if (callback) callback();
-        };
-
-        window.speechSynthesis.speak(utterance);
-    }
-
-    function setUIState(state, message) {
-        statusBox.dataset.state = state;
-        if (state === 'listening') {
-            voiceOrb.classList.add('orb-active');
-            orbRipple.classList.remove('hidden');
-            orbIcon.className = "fa-solid fa-microphone-lines text-yellow-400 text-3xl animate-pulse";
-            statusBox.innerHTML = `<span class="text-emerald-400 font-bold animate-pulse">Listening...</span><span class="text-slate-300 mt-1">${message}</span>`;
-        } else if (state === 'speaking') {
-            voiceOrb.classList.add('orb-active');
-            orbRipple.classList.remove('hidden');
-            orbIcon.className = "fa-solid fa-volume-high text-yellow-400 text-3xl animate-bounce";
-            statusBox.innerHTML = `<span class="text-yellow-400 font-bold">Agent Speaking:</span><span class="text-slate-300 mt-1">${message}</span>`;
-        } else if (state === 'thinking') {
-            voiceOrb.classList.remove('orb-active');
-            orbRipple.classList.add('hidden');
-            orbIcon.className = "fa-solid fa-brain text-yellow-400 text-3xl animate-spin";
-            statusBox.innerHTML = `<span class="text-blue-400 font-bold">Processing...</span><span class="text-slate-300 mt-1">${message}</span>`;
-        } else {
-            voiceOrb.classList.remove('orb-active');
-            orbRipple.classList.add('hidden');
-            orbIcon.className = "fa-solid fa-microphone text-yellow-400 text-3xl";
-            statusBox.innerHTML = `<span class="text-yellow-400 font-bold">Ready</span><span class="text-slate-300 mt-1">${message}</span>`;
+                try {
+                    recognition.start();
+                } catch (e) {
+                    // Already running or starting
+                }
+            }, 300);
         }
-    }
 
-    function stopAll() {
-        isRunning = false;
-        window.speechSynthesis.cancel();
-        if (recognition) {
-            try { recognition.stop(); } catch(e){}
+        // Smart, to-the-point keyword matching from the full resume knowledge base[cite: 1]
+        function generateSmartAnswer(query) {
+            let reply = "";
+
+            if (query.includes("altamed") || (query.includes("current") && query.includes("job"))) {
+                reply = "Srinjoy is currently a Dynamics 365 CRM Architect at AltaMed Health Services since December 2024. He collaborates with business teams, physicians, and sales teams, manages Dataverse integrations, builds Power BI and Dynamics dashboards, and writes custom C# .NET plugins.";
+            } else if (query.includes("microsoft")) {
+                reply = "From August 2022 to July 2023, Srinjoy worked as a Software Engineer at Microsoft via Brooksource. He built web applications powering global Azure data center construction workflows, handling everything from land acquisition to energy provisioning using C#, Python, JavaScript, and Azure DevOps.";
+            } else if (query.includes("foundation") || query.includes("fbm") || query.includes("building materials")) {
+                reply = "He worked as a Software Engineer at Foundation Building Materials from August 2023 to December 2024, building custom Sales CRM apps to capture web leads, set up automated lead assignment rules, Power Pages, and cross-platform ERP integrations.";
+            } else if (query.includes("toshiba") || query.includes("esuite")) {
+                reply = "At Toshiba Software India from 2017 to 2020, Srinjoy developed eSuite, a printing management software hosted on web and Multi-Functional Peripherals using .NET, Java, and D365 CRM for clients across Canada, China, Malaysia, and Sri Lanka.";
+            } else if (query.includes("education") || query.includes("degree") || query.includes("university") || query.includes("long beach") || query.includes("vit")) {
+                reply = "Srinjoy holds a Master's in Computer Science from Long Beach State University, earned in 2022, and a Bachelor's in Computer Science and Engineering from VIT Vellore, completed in 2017.";
+            } else if (query.includes("skill") || query.includes("technology") || query.includes("c#") || query.includes("dynamics") || query.includes("plugin")) {
+                reply = "His core technical skill set includes Dynamics 365 CRM Sales, C# .NET framework WebAPI custom plugins, JavaScript, Power Automate, Power Pages, Python, SQL DB, SSMS, and Agentic AI solutions.";
+            } else if (query.includes("research") || query.includes("paper") || query.includes("malaria") || query.includes("publication")) {
+                reply = "Srinjoy published a research paper titled 'Detection of Malaria Parasites in Thin Blood Smears Using CNN-Based Approach', featured by Springer.";
+            } else if (query.includes("project") || query.includes("autonomous") || query.includes("spam")) {
+                reply = "Key projects include an autonomous vehicles safety project using AWS IoT Greengrass, and a final-year security evaluation project classifying spam using Bayes Theorem in C# .NET.";
+            } else if (query.includes("contact") || query.includes("email") || query.includes("phone")) {
+                reply = "You can reach Srinjoy directly via his email at srinjoyc94@gmail.com, call him at 562-514-2898, or connect with him via the contact form on this website.";
+            } else {
+                reply = "Srinjoy is an accomplished Dynamics 365 Architect with enterprise experience at Microsoft, AltaMed, and Toshiba. You can ask me about his work history, C# plugin expertise, education, or research papers.";
+            }
+
+            setUIState('speaking', reply);
+            speakAsAlex(reply, () => {
+                restartListeningSafely();
+            });
         }
-        actionBtn.innerHTML = `<i class="fa-solid fa-play"></i> Start Agent`;
-        setUIState('idle', 'Tap the orb to start conversation.');
-    }
-</script>
+
+        // Text-to-Speech engine mapped to Alex (Professional Male Voice)
+        function speakAsAlex(text, callback) {
+            window.speechSynthesis.cancel(); // Immediate barge-in stop
+            const utterance = new SpeechSynthesisUtterance(text);
+            
+            if (selectedVoice) {
+                utterance.voice = selectedVoice;
+            }
+            utterance.rate = 1.0;
+            utterance.pitch = 0.95; // Slightly lower pitch for a professional male voice tone
+
+            utterance.onend = () => {
+                if (callback) callback();
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function setUIState(state, message) {
+            statusBox.dataset.state = state;
+            if (state === 'listening') {
+                voiceOrb.classList.add('orb-active');
+                orbRipple.classList.remove('hidden');
+                orbIcon.className = "fa-solid fa-microphone-lines text-yellow-400 text-3xl animate-pulse";
+                statusBox.innerHTML = `<span class="text-emerald-400 font-bold animate-pulse">Alex is listening...</span><span class="text-slate-300 mt-1">${message}</span>`;
+            } else if (state === 'speaking') {
+                voiceOrb.classList.add('orb-active');
+                orbRipple.classList.remove('hidden');
+                orbIcon.className = "fa-solid fa-volume-high text-yellow-400 text-3xl animate-bounce";
+                statusBox.innerHTML = `<span class="text-yellow-400 font-bold">Alex Speaking:</span><span class="text-slate-300 mt-1">${message}</span>`;
+            } else if (state === 'thinking') {
+                voiceOrb.classList.remove('orb-active');
+                orbRipple.classList.add('hidden');
+                orbIcon.className = "fa-solid fa-brain text-yellow-400 text-3xl animate-spin";
+                statusBox.innerHTML = `<span class="text-blue-400 font-bold">Alex thinking...</span><span class="text-slate-300 mt-1">${message}</span>`;
+            } else {
+                voiceOrb.classList.remove('orb-active');
+                orbRipple.classList.add('hidden');
+                orbIcon.className = "fa-solid fa-microphone text-yellow-400 text-3xl";
+                statusBox.innerHTML = `<span class="text-yellow-400 font-bold">Ready</span><span class="text-slate-300 mt-1">${message}</span>`;
+            }
+        }
+
+        function stopAgent() {
+            isRunning = false;
+            window.speechSynthesis.cancel();
+            if (recognition) {
+                try { recognition.stop(); } catch(e){}
+            }
+            actionBtn.innerHTML = `<i class="fa-solid fa-play"></i> Start Alex`;
+            setUIState('idle', 'Tap the orb to start conversation with Alex.');
+        }
+    </script>
+</body>
+</html>

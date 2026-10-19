@@ -1,202 +1,161 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Srinjoy's AI Voice Assistant</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 15px rgba(234, 179, 8, 0.4), inset 0 0 15px rgba(234, 179, 8, 0.2); }
-            50% { box-shadow: 0 0 35px rgba(234, 179, 8, 0.8), inset 0 0 25px rgba(234, 179, 8, 0.5); }
-        .orb-active { animation: pulse-glow 2s infinite ease-in-out; }
-    </style>
-</head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
+<script>
+    const statusBox = document.getElementById('agentStatus');
+    const voiceOrb = document.getElementById('voiceOrb');
+    const orbRipple = document.getElementById('orbRipple');
+    const orbIcon = document.getElementById('orbIcon');
+    const actionBtn = document.getElementById('actionBtn');
 
-    <div class="max-w-md w-full bg-slate-800 border border-slate-700 rounded-3xl p-8 shadow-2xl text-center space-y-6">
-        
-        <!-- Header -->
-        <div>
-            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium mb-3">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Free Custom Voice Agent
-            </span>
-            <h1 class="text-2xl font-black text-yellow-400">Talk to Srinjoy's AI</h1>
-            <p class="text-xs text-slate-400 mt-1">Ask about work experience, Microsoft background, or technical skills.</p>
-        </div>
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+    let isRunning = false;
 
-        <!-- Glowing Voice Orb UI -->
-        <div class="relative flex items-center justify-center py-6">
-            <div id="voiceOrb" onclick="toggleConversation()" class="w-28 h-28 bg-slate-900 border-2 border-yellow-500 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 shadow-2xl">
-                <i id="orbIcon" class="fa-solid fa-microphone text-yellow-400 text-3xl"></i>
-            </div>
-            <!-- Outer ripple effect when active -->
-            <div id="orbRipple" class="absolute w-36 h-36 rounded-full border border-yellow-500/30 pointer-events-none hidden animate-ping"></div>
-        </div>
+    // Resume Knowledge Base
+    const kb = `
+    Name: Srinjoy Chatterjee. 
+    Role: Microsoft Dynamics 365 CE Developer and Architect. 
+    Current Job: Dynamics 365 CRM Architect at AltaMed Health Services since December 2024, focusing on C# .NET plugins, Dataverse integrations, and Power BI dashboards.
+    Past Experience: Software Engineer at Foundation Building Materials (2023-2024), Software Engineer at Microsoft (2022-2023) working on Azure data center web applications, and Software Developer at Toshiba Software India (2017-2020) building eSuite printing management apps.
+    Education: MS in Computer Science from Long Beach State University (2022), B.Tech in CSE from VIT Vellore (2017).
+    Skills: D365 CE, C#, .NET WebAPI plugins, JavaScript, Power Automate, Power Pages, Agentic AI, SSMS, Python.
+    `;
 
-        <!-- Dynamic Status Display -->
-        <div id="agentStatus" class="bg-slate-900/80 border border-slate-700 rounded-2xl p-4 text-xs text-slate-300 min-h-[80px] flex flex-col items-center justify-center space-y-1">
-            <span class="text-yellow-400 font-bold">Tap the orb to start conversation</span>
-            <span class="text-[10px] text-slate-500">(Automatic greeting will play on start)</span>
-        </div>
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
 
-        <!-- Controls -->
-        <div class="flex gap-2">
-            <button onclick="toggleConversation()" id="actionBtn" class="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-3 px-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-sm">
-                <i class="fa-solid fa-play"></i> Start Agent
-            </button>
-        </div>
-    </div>
-
-    <script>
-        const statusBox = document.getElementById('agentStatus');
-        const voiceOrb = document.getElementById('voiceOrb');
-        const orbRipple = document.getElementById('orbRipple');
-        const orbIcon = document.getElementById('orbIcon');
-        const actionBtn = document.getElementById('actionBtn');
-
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let recognition;
-        let isRunning = false;
-
-        // Resume Knowledge Base
-        const kb = `
-        Name: Srinjoy Chatterjee. 
-        Role: Microsoft Dynamics 365 CE Developer and Architect. 
-        Current Job: Dynamics 365 CRM Architect at AltaMed Health Services since December 2024, focusing on C# .NET plugins, Dataverse integrations, and Power BI dashboards.
-        Past Experience: Software Engineer at Foundation Building Materials (2023-2024), Software Engineer at Microsoft (2022-2023) working on Azure data center web applications, and Software Developer at Toshiba Software India (2017-2020) building eSuite printing management apps.
-        Education: MS in Computer Science from Long Beach State University (2022), B.Tech in CSE from VIT Vellore (2017).
-        Skills: D365 CE, C#, .NET WebAPI plugins, JavaScript, Power Automate, Power Pages, Agentic AI, SSMS, Python.
-        `;
-
-        if (SpeechRecognition) {
-            recognition = new SpeechRecognition();
-            recognition.continuous = false;
-            recognition.interimResults = false;
-            recognition.lang = 'en-US';
-
-            recognition.onstart = () => {
+        recognition.onstart = () => {
+            if (isRunning) {
                 setUIState('listening', 'Listening... Speak your question now.');
-            };
+            }
+        };
 
-            recognition.onresult = (event) => {
-                const userSpeech = event.results[0][0].transcript.toLowerCase();
-                setUIState('thinking', `You asked: "${userSpeech}"`);
-                processAnswer(userSpeech);
-            };
+        recognition.onresult = (event) => {
+            const userSpeech = event.results[0][0].transcript.toLowerCase();
+            setUIState('thinking', `You asked: "${userSpeech}"`);
+            processAnswer(userSpeech);
+        };
 
-            recognition.onerror = () => {
-                setUIState('idle', 'Microphone error. Tap the orb to retry.');
-            };
+        recognition.onerror = (event) => {
+            // Ignore benign abort errors when stopping speech manually
+            if (event.error !== 'aborted' && isRunning) {
+                console.warn("Speech recognition warning:", event.error);
+                // Gracefully fallback to ready state instead of locking up
+                setUIState('idle', 'Tap the orb to speak.');
+            }
+        };
 
-            recognition.onend = () => {
-                if (isRunning && statusBox.dataset.state === 'listening') {
-                    // If it stopped without input
-                    setUIState('idle', 'Tap the orb to speak again.');
-                }
-            };
+        recognition.onend = () => {
+            // Keep loop alive if agent is running and not currently speaking
+            if (isRunning && statusBox.dataset.state === 'listening') {
+                setUIState('idle', 'Tap the orb if you want to say something else.');
+            }
+        };
+    } else {
+        alert("Speech recognition requires Chrome, Edge, or Safari.");
+    }
+
+    function toggleConversation() {
+        if (!isRunning) {
+            isRunning = true;
+            actionBtn.innerHTML = `<i class="fa-solid fa-stop"></i> Stop Agent`;
+            playGreeting();
         } else {
-            alert("Speech recognition requires Chrome, Edge, or Safari.");
+            stopAll();
+        }
+    }
+
+    function playGreeting() {
+        const greeting = "Hi there! I am Srinjoy's custom AI voice assistant. Ask me anything about his experience at Microsoft, his work as a Dynamics 365 architect, or his technical skills.";
+        setUIState('speaking', greeting);
+        
+        speakText(greeting, () => {
+            // Wait 600ms after audio finishes before safely turning on the mic
+            setTimeout(() => {
+                if (isRunning) startListening();
+            }, 600);
+        });
+    }
+
+    function startListening() {
+        if (!recognition || !isRunning) return;
+        try {
+            recognition.start();
+        } catch (e) {
+            // Safe catch if recognition is already running
+        }
+    }
+
+    function processAnswer(query) {
+        let answer = "";
+
+        if (query.includes("experience") || query.includes("work") || query.includes("job") || query.includes("altamed") || query.includes("microsoft")) {
+            answer = "Srinjoy is currently a Dynamics 365 CRM Architect at AltaMed. Previously, he engineered web apps for Azure data centers at Microsoft, and worked at Foundation Building Materials and Toshiba.";
+        } else if (query.includes("skill") || query.includes("technology") || query.includes("code") || query.includes("c#") || query.includes("javascript")) {
+            answer = "His core stack includes Microsoft Dynamics 365 CE, C# .NET custom plugins, JavaScript, Power Automate, Power Pages, Python, and Agentic AI solutions.";
+        } else if (query.includes("education") || query.includes("study") || query.includes("degree") || query.includes("university")) {
+            answer = "He earned his Master's in Computer Science from Long Beach State University in 2022 and his B.Tech in Computer Science from VIT Vellore.";
+        } else if (query.includes("hello") || query.includes("hi")) {
+            answer = "Hello! How can I help you learn more about Srinjoy's professional background today?";
+        } else {
+            answer = "That's a great question about Srinjoy's background. He specializes in enterprise CRM architecture and full-stack development. You can also review his interactive resume or contact him directly on this page.";
         }
 
-        function toggleConversation() {
-            if (!isRunning) {
-                isRunning = true;
-                actionBtn.innerHTML = `<i class="fa-solid fa-stop"></i> Stop Agent`;
-                playGreeting();
-            } else {
-                stopAll();
-            }
+        setUIState('speaking', answer);
+        speakText(answer, () => {
+            // Wait 600ms after answer finishes before reopening mic loop
+            setTimeout(() => {
+                if (isRunning) startListening();
+            }, 600);
+        });
+    }
+
+    function speakText(text, callback) {
+        window.speechSynthesis.cancel(); // Stop any overlapping speech
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.05;
+        utterance.pitch = 1.0;
+
+        utterance.onend = () => {
+            if (callback) callback();
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function setUIState(state, message) {
+        statusBox.dataset.state = state;
+        if (state === 'listening') {
+            voiceOrb.classList.add('orb-active');
+            orbRipple.classList.remove('hidden');
+            orbIcon.className = "fa-solid fa-microphone-lines text-yellow-400 text-3xl animate-pulse";
+            statusBox.innerHTML = `<span class="text-emerald-400 font-bold animate-pulse">Listening...</span><span class="text-slate-300 mt-1">${message}</span>`;
+        } else if (state === 'speaking') {
+            voiceOrb.classList.add('orb-active');
+            orbRipple.classList.remove('hidden');
+            orbIcon.className = "fa-solid fa-volume-high text-yellow-400 text-3xl animate-bounce";
+            statusBox.innerHTML = `<span class="text-yellow-400 font-bold">Agent Speaking:</span><span class="text-slate-300 mt-1">${message}</span>`;
+        } else if (state === 'thinking') {
+            voiceOrb.classList.remove('orb-active');
+            orbRipple.classList.add('hidden');
+            orbIcon.className = "fa-solid fa-brain text-yellow-400 text-3xl animate-spin";
+            statusBox.innerHTML = `<span class="text-blue-400 font-bold">Processing...</span><span class="text-slate-300 mt-1">${message}</span>`;
+        } else {
+            voiceOrb.classList.remove('orb-active');
+            orbRipple.classList.add('hidden');
+            orbIcon.className = "fa-solid fa-microphone text-yellow-400 text-3xl";
+            statusBox.innerHTML = `<span class="text-yellow-400 font-bold">Ready</span><span class="text-slate-300 mt-1">${message}</span>`;
         }
+    }
 
-        function playGreeting() {
-            const greeting = "Hi there! I am Srinjoy's custom AI voice assistant. Ask me anything about his experience at Microsoft, his work as a Dynamics 365 architect, or his technical skills.";
-            speakText(greeting, () => {
-                startListening();
-            });
+    function stopAll() {
+        isRunning = false;
+        window.speechSynthesis.cancel();
+        if (recognition) {
+            try { recognition.stop(); } catch(e){}
         }
-
-        function startListening() {
-            if (!recognition) return;
-            try {
-                recognition.start();
-            } catch (e) {
-                // Already started
-            }
-        }
-
-        function processAnswer(query) {
-            let answer = "";
-
-            if (query.includes("experience") || query.includes("work") || query.includes("job") || query.includes("altamed") || query.includes("microsoft")) {
-                answer = "Srinjoy is currently a Dynamics 365 CRM Architect at AltaMed. Previously, he engineered web apps for Azure data centers at Microsoft, and worked at Foundation Building Materials and Toshiba.";
-            } else if (query.includes("skill") || query.includes("technology") || query.includes("code") || query.includes("c#") || query.includes("javascript")) {
-                answer = "His core stack includes Microsoft Dynamics 365 CE, C# .NET custom plugins, JavaScript, Power Automate, Power Pages, Python, and Agentic AI solutions.";
-            } else if (query.includes("education") || query.includes("study") || query.includes("degree") || query.includes("university")) {
-                answer = "He earned his Master's in Computer Science from Long Beach State University in 2022 and his B.Tech in Computer Science from VIT Vellore.";
-            } else if (query.includes("hello") || query.includes("hi")) {
-                answer = "Hello! How can I help you learn more about Srinjoy's professional background today?";
-            } else {
-                answer = "That's a great question about Srinjoy's background. He specializes in enterprise CRM architecture and full-stack development. You can also review his interactive resume or contact him directly on this page.";
-            }
-
-            setUIState('speaking', answer);
-            speakText(answer, () => {
-                // Automatically listen again for continuous conversation
-                setTimeout(() => {
-                    if (isRunning) startListening();
-                }, 500);
-            });
-        }
-
-        function speakText(text, callback) {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 1.05;
-            utterance.pitch = 1.0;
-
-            utterance.onend = () => {
-                if (callback) callback();
-            };
-
-            window.speechSynthesis.speak(utterance);
-        }
-
-        function setUIState(state, message) {
-            statusBox.dataset.state = state;
-            if (state === 'listening') {
-                voiceOrb.classList.add('orb-active');
-                orbRipple.classList.remove('hidden');
-                orbIcon.className = "fa-solid fa-microphone-lines text-yellow-400 text-3xl animate-pulse";
-                statusBox.innerHTML = `<span class="text-emerald-400 font-bold animate-pulse">Listening...</span><span class="text-slate-300 mt-1">${message}</span>`;
-            } else if (state === 'speaking') {
-                voiceOrb.classList.add('orb-active');
-                orbRipple.classList.remove('hidden');
-                orbIcon.className = "fa-solid fa-volume-high text-yellow-400 text-3xl animate-bounce";
-                statusBox.innerHTML = `<span class="text-yellow-400 font-bold">Agent Speaking:</span><span class="text-slate-300 mt-1">${message}</span>`;
-            } else if (state === 'thinking') {
-                voiceOrb.classList.remove('orb-active');
-                orbRipple.classList.add('hidden');
-                orbIcon.className = "fa-solid fa-brain text-yellow-400 text-3xl animate-spin";
-                statusBox.innerHTML = `<span class="text-blue-400 font-bold">Processing...</span><span class="text-slate-300 mt-1">${message}</span>`;
-            } else {
-                voiceOrb.classList.remove('orb-active');
-                orbRipple.classList.add('hidden');
-                orbIcon.className = "fa-solid fa-microphone text-yellow-400 text-3xl";
-                statusBox.innerHTML = `<span class="text-yellow-400 font-bold">Ready</span><span class="text-slate-300 mt-1">${message}</span>`;
-            }
-        }
-
-        function stopAll() {
-            isRunning = false;
-            window.speechSynthesis.cancel();
-            if (recognition) {
-                try { recognition.stop(); } catch(e){}
-            }
-            actionBtn.innerHTML = `<i class="fa-solid fa-play"></i> Start Agent`;
-            setUIState('idle', 'Tap the orb to start conversation.');
-        }
-    </script>
-</body>
-</html>
+        actionBtn.innerHTML = `<i class="fa-solid fa-play"></i> Start Agent`;
+        setUIState('idle', 'Tap the orb to start conversation.');
+    }
+</script>
